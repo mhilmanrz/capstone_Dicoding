@@ -1,0 +1,152 @@
+# Status Audit & Implementation Plan — LLM Service Capstone
+
+## Ringkasan Temuan
+
+Proyek ini masih dalam kondisi **scaffolding awal** — semua file sudah dibuat, namun sebagian besar hanya berisi stub placeholder dengan komentar `// TODO`. Tiga siklus implementasi yang diminta **belum selesai sama sekali**.
+
+---
+
+## Status Per File
+
+| File | Status | Keterangan |
+|---|---|---|
+| [utils/config.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/utils/config.js) | ✅ Selesai | Validasi env, export key sudah lengkap |
+| [utils/logger.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/utils/logger.js) | ✅ Selesai | Pino logger sudah terkonfigurasi |
+| [middleware/requestLogger.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/requestLogger.js) | ✅ Selesai | UUID, log structured, durasi sudah ada |
+| [prompts/system.md](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/prompts/system.md) | ✅ Selesai | System prompt + schema sudah ada |
+| `migrations/initial-schema.js` | ✅ Selesai | Semua tabel DB sudah terdefinisi |
+| [tests/smoke.test.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/tests/smoke.test.js) | ✅ Selesai | Smoke test health & metrics |
+| [services/llm.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js) | ⚠️ Parsial | `SuggestionSchema` + [validateAIOutput](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#23-31) ada, tapi [callLLM](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#19-23) kosong |
+| [app.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/app.js) | ❌ Belum | Request logger & error handler belum di-mount; semua route masih di-comment |
+| [middleware/authenticate.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/authenticate.js) | ❌ Belum | Selalu return 401 — JWT belum diimplementasikan |
+| [middleware/errorHandler.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/errorHandler.js) | ❌ Belum | Hanya `console.error`, belum pakai Pino |
+| [middleware/rateLimiter.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/rateLimiter.js) | ❌ Belum | Passthrough, belum pakai `express-rate-limit` |
+| [routes/auth.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/auth.js) | ❌ Belum | Kosong — POST /register, /login, GET /me |
+| [routes/goals.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/goals.js) | ❌ Belum | Kosong — CRUD goals |
+| [routes/ai.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/ai.js) | ❌ Belum | Kosong — POST /plan/suggest |
+| [routes/tasks.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/tasks.js) | ❌ Belum | Kosong — accept/reject + list tasks |
+| [routes/progress.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/progress.js) | ❌ Belum | Kosong (belum dibuka, Cycle 2) |
+| `models/` | ❌ Belum | Direktori hanya berisi [.gitkeep](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/models/.gitkeep) — tidak ada model DB |
+
+---
+
+## Proposed Changes
+
+### Cycle 0 — Setup (Observability) — Status: ⚠️ Parsial Selesai
+
+**Yang sudah ada:**
+- `SuggestionSchema` (Zod) ✅
+- [validateAIOutput](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#23-31) ✅
+- [requestLogger.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/requestLogger.js) ✅
+- [logger.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/utils/logger.js) ✅
+
+**Yang masih kurang:**
+
+#### [MODIFY] [app.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/app.js)
+- Mount [requestLogger](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/requestLogger.js#5-20) middleware (baris 10 masih `// TODO`)
+- Mount [errorHandler](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/errorHandler.js#1-7) di akhir file (baris 33 masih `// TODO`)
+
+#### [MODIFY] [middleware/errorHandler.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/errorHandler.js)
+- Ganti `console.error` dengan `logger.error` dari Pino + tambahkan log `request_id`
+
+---
+
+### Cycle 1 — Scaffolding (AI Stub + Auth + CRUD) — Status: ❌ Belum
+
+#### [NEW] Model files di `src/models/`
+Perlu dibuat file DB query layer (menggunakan `pg` pool) untuk tabel:
+- `users.js` — `createUser`, `findByEmail`, `findById`
+- [goals.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/goals.js) — `createGoal`, `listByUser`, `updateGoal`, `deleteGoal`
+- [tasks.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/tasks.js) — `insertTasks`, `listByGoal`, `updateStatus`
+- `ai_recommendations.js` — `savePendingRecommendation`, `updateStatus`
+
+#### [MODIFY] [middleware/authenticate.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/authenticate.js)
+- Implementasi JWT `Bearer` token verification menggunakan `jsonwebtoken`
+- Set `req.user = { id, email }` jika valid
+
+#### [MODIFY] [routes/auth.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/auth.js)
+- `POST /register` — hash password dengan `bcryptjs`, simpan ke tabel `users` + buat `profile`
+- `POST /login` — verifikasi password, return JWT access token
+- `GET /me` — return user info dari `req.user`
+
+#### [MODIFY] [routes/goals.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/goals.js)
+- `POST /` — buat goal baru
+- `GET /` — list semua goal user
+- `PATCH /:id` — update goal
+- `DELETE /:id` — hapus goal
+- Semua route dilindungi [authenticate](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/authenticate.js#1-6) middleware
+
+#### [MODIFY] [routes/ai.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/ai.js)
+- `POST /plan/suggest` — endpoint yang memanggil [callLLM](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#19-23), menyimpan `ai_recommendations`, dan return saran
+
+#### [MODIFY] [services/llm.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js)
+- Implementasi [callLLM(prompt, context)](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#19-23):
+  1. Baca [system.md](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/prompts/system.md) sebagai system prompt
+  2. Bangun user prompt dari `context` (goal, profil, task sudah ada)
+  3. Hubungkan ke Gemini via `@google/generative-ai` menggunakan `config.geminiKey`
+  4. Tambahkan **mock mode**: jika `LLM_PROVIDER=mock` (env), return fixture JSON tanpa memanggil API
+  5. Panggil [validateAIOutput](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#23-31) pada hasil, log hasilnya dengan `logger`
+
+#### [MODIFY] [routes/tasks.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/tasks.js)
+- `POST /` — simpan satu/banyak task (hasil accept dari AI) ke tabel `tasks`
+- `GET /` — list tasks berdasarkan `goal_id`
+- `PATCH /:id/status` — update status task (`todo → done`)
+
+#### [MODIFY] [app.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/app.js)
+- Uncomment dan daftarkan `authRoutes`, `goalRoutes`, `aiRoutes`, `taskRoutes`
+
+---
+
+### Cycle 2 — Rate Limiter & Progress (Keluar dari Scope TODO Saat Ini)
+
+#### [MODIFY] [middleware/rateLimiter.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/rateLimiter.js)
+- Implementasi `express-rate-limit` untuk [aiLimiter](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/rateLimiter.js#1-4) (5 req/menit) dan [authLimiter](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/middleware/rateLimiter.js#4-5) (10 req/menit)
+
+#### [routes/progress.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/progress.js)
+- Endpoint weekly progress dari tabel `progress_snapshots` (Cycle 2)
+
+---
+
+## Verification Plan
+
+### Automated Tests (yang sudah ada)
+```bash
+cd server
+npm test
+```
+Smoke test ([smoke.test.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/tests/smoke.test.js)) sudah ada dan akan memverifikasi `GET /health` dan `GET /metrics`.
+
+### Tests Baru yang Perlu Ditambahkan
+Setelah implementasi selesai, perlu ditambahkan:
+
+1. **Unit test untuk [validateAIOutput](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#23-31)** — test input JSON valid, invalid, dan malformed
+2. **Unit test untuk [callLLM](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/services/llm.js#19-23) (mock mode)** — test bahwa mock mengembalikan output sesuai `SuggestionSchema`
+3. **Integration test untuk `POST /api/auth/register` dan `POST /api/auth/login`**
+4. **Integration test untuk `POST /api/ai/plan/suggest`** menggunakan mock LLM provider
+
+### Manual Verification
+Setelah server berjalan (`npm run dev`), lakukan:
+
+1. **Test health check:**
+   ```
+   GET http://localhost:3000/health
+   → Expect: { "status": "ok" }
+   ```
+
+2. **Test register + login:**
+   ```
+   POST http://localhost:3000/api/auth/register
+   Body: { "email": "test@test.com", "password": "password123" }
+   → Expect: 201 Created + { token: "..." }
+   ```
+
+3. **Test AI suggest (mock mode):**
+   - Set `LLM_PROVIDER=mock` di [.env](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/.env)
+   ```
+   POST http://localhost:3000/api/ai/plan/suggest
+   Header: Authorization: Bearer <token>
+   Body: { "goal_id": "<uuid>" }
+   → Expect: 200 + array tasks sesuai SuggestionSchema
+   ```
+
+4. Periksa log di terminal — setiap request harus muncul log JSON dari Pino.
