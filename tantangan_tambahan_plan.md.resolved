@@ -1,0 +1,224 @@
+# Implementation Plan — Tantangan Tambahan
+
+## 1. Husky Pre-commit Hook (Lint + Format)
+
+### Latar Belakang
+Husky dipasang di root workspace (`c:\...\capstone-case-ai-web-dev-starter`), bukan di dalam `server/`. Hook akan memblokir commit jika ada error lint dari ESLint dan Prettier.
+
+> [!IMPORTANT]
+> ESLint sudah ada di `server/`. Prettier **belum** ada sebagai dependency — perlu ditambahkan.
+
+### Proposed Changes
+
+#### [MODIFY] Root [package.json](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/package.json) (file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/package.json)
+- Tambahkan `scripts`:
+  ```json
+  "prepare": "husky",
+  "lint": "cd server && npm run lint && cd ../client && npm run lint",
+  "format": "prettier --write \"server/src/**/*.js\" \"client/src/**/*.{jsx,js,css}\""
+  ```
+- Tambahkan `devDependencies`:
+  ```json
+  "husky": "^9.x",
+  "lint-staged": "^15.x",
+  "prettier": "^3.x"
+  ```
+
+#### [NEW] `.husky/pre-commit`
+Hook shell script yang dijalankan sebelum setiap `git commit`:
+```sh
+npx lint-staged
+```
+
+#### [NEW] `.lintstagedrc.json` di root
+Konfigurasi menentukan perintah yang dijalankan per jenis file:
+```json
+{
+  "server/src/**/*.js": ["eslint --fix", "prettier --write"],
+  "client/src/**/*.{js,jsx,css}": ["prettier --write"]
+}
+```
+
+#### [NEW] `.prettierrc` di root
+Konfigurasi format standar:
+```json
+{
+  "singleQuote": true,
+  "semi": true,
+  "trailingComma": "es5",
+  "printWidth": 100
+}
+```
+
+#### [MODIFY] [server/.eslintrc.json](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/.eslintrc.json)  
+Tambahkan rule `prettier/prettier` agar ESLint dan Prettier tidak konflik (opsional, tapi recommended).
+
+### Verification
+```bash
+# Install packages
+npm install  # di root
+
+# Coba commit file apa saja dengan error lint → harus GAGAL
+# Coba commit file clean → harus BERHASIL
+git add server/src/services/llm.js && git commit -m "test hook"
+```
+
+---
+
+## 2. Script `seed.js` — Dummy Data
+
+### Latar Belakang
+Script dijalankan secara langsung (`node server/seed.js`) untuk mengisi DB dengan data development. Menggunakan `pg` pool yang sama dengan aplikasi. Data: 2 user, masing-masing 1-2 goals, masing-masing 2-3 tasks.
+
+> [!NOTE]
+> Script harus **idempotent** (aman dijalankan berkali-kali). Gunakan `ON CONFLICT DO NOTHING` atau cek keberadaan data lebih dulu.
+
+### Proposed Changes
+
+#### [NEW] `server/seed.js`
+```
+server/seed.js
+```
+Isi script:
+1. Load `dotenv` dan koneksi `pg` dari `DATABASE_URL`
+2. Hash password dummy dengan `bcryptjs`
+3. Insert 2 users (`alice@dev.com`, `bob@dev.com`) + profiles mereka
+4. Insert 2 goals per user (contoh: "Belajar React", "Kuasai Node.js")
+5. Insert 2-3 tasks per goal dengan `source: 'manual'`, tanggal maju 1-7 hari dari sekarang
+6. `console.log` setiap step, tutup koneksi di `finally`
+
+#### [MODIFY] [server/package.json](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/package.json)
+Tambahkan script shortcut:
+```json
+"seed": "node seed.js"
+```
+
+### Contoh Data
+
+| User | Goals | Tasks/Goal |
+|---|---|---|
+| alice@dev.com | "Belajar React", "Kuasai Node.js" | 3 tasks masing-masing |
+| bob@dev.com | "Machine Learning Dasar" | 2 tasks |
+
+### Verification
+```bash
+cd server
+npm run seed
+# Harus print: "✅ Seed selesai. 2 users, 3 goals, 8 tasks inserted."
+# Jalankan 2x → tidak ada error duplicate
+```
+
+---
+
+## 3. Comprehensive Health Check
+
+### Latar Belakang
+Endpoint `GET /health` saat ini hanya return `{ status: 'ok' }` tanpa cek apapun. Perlu ditambahkan pengecekan aktual ke:
+- **Database** — `SELECT 1` query sederhana via `pg`  
+- **LLM API** — cek apakah `GEMINI_API_KEY` ada dan (opsional) lakukan ping ringan ke Gemini
+
+Status response:
+- `200 ok` — semua dependency sehat
+- `200 degraded` — satu atau lebih dependency tidak tersedia (HTTP 200 agar load balancer tidak kill instance)
+- `503 unhealthy` — semua dependency gagal (opsional, tergantung kebutuhan)
+
+> [!NOTE]
+> Gunakan HTTP **200** untuk semua kasus (ok + degraded) agar tidak memicu restart otomatis di platform seperti Railway/Render. Status semantiknya ada di body JSON.
+
+### Proposed Changes
+
+#### [NEW] [server/src/utils/db.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/utils/db.js)
+Buat singleton `pg.Pool` yang bisa di-import oleh health check dan model:
+```js
+const { Pool } = require('pg');
+const config = require('./config');
+const pool = new Pool({ connectionString: config.db });
+module.exports = pool;
+```
+*(Jika sudah ada di tempat lain, cukup re-use dari sana.)*
+
+#### [MODIFY] [routes/health.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/src/routes/health.js)
+Logika baru:
+```
+GET /health
+  1. Jalankan Promise.allSettled([checkDb(), checkLLM()])
+  2. Kumpulkan status masing-masing:
+     - checkDb()  → SELECT 1 dari pool, timeout 2s
+     - checkLLM() → cek process.env.GEMINI_API_KEY exists + (opsional) ping Gemini models.list
+  3. Tentukan overall status:
+     - Semua ok  → status: 'ok'
+     - Salah satu gagal → status: 'degraded'
+  4. Return JSON body:
+     {
+       status: 'ok' | 'degraded',
+       timestamp: ISO string,
+       checks: {
+         database: { status: 'ok'|'error', message?: string },
+         llm:      { status: 'ok'|'error', message?: string }
+       }
+     }
+```
+
+#### [MODIFY] [tests/smoke.test.js](file:///c:/Users/qkiki/Documents/Dicoding%202/capstoneprojek/capstone-case-ai-web-dev-starter/server/tests/smoke.test.js)
+Update test untuk memeriksa response body yang baru:
+```js
+expect(res.body).toHaveProperty('checks');
+expect(res.body).toHaveProperty('status');
+// Tidak assert nilai 'ok' spesifik agar test tidak gagal saat DB tidak tersedia di CI
+```
+
+### Response Contoh
+
+**Semua sehat:**
+```json
+{
+  "status": "ok",
+  "timestamp": "2026-04-15T10:23:00.000Z",
+  "checks": {
+    "database": { "status": "ok" },
+    "llm": { "status": "ok" }
+  }
+}
+```
+
+**DB gagal:**
+```json
+{
+  "status": "degraded",
+  "timestamp": "2026-04-15T10:23:00.000Z",
+  "checks": {
+    "database": { "status": "error", "message": "connect ECONNREFUSED" },
+    "llm": { "status": "ok" }
+  }
+}
+```
+
+### Verification
+```bash
+# Normal (DB up)
+curl http://localhost:3000/health
+→ { "status": "ok", ... }
+
+# Matikan DB, jalankan server
+→ { "status": "degraded", "checks": { "database": { "status": "error" }, ... } }
+
+# Hapus GEMINI_API_KEY dari .env
+→ { "status": "degraded", "checks": { "llm": { "status": "error" }, ... } }
+```
+
+---
+
+## Urutan Implementasi yang Direkomendasikan
+
+```mermaid
+graph LR
+  A[db.js singleton] --> B[health check]
+  A --> C[seed.js]
+  D[install prettier + husky] --> E[.husky/pre-commit]
+  E --> F[.lintstagedrc.json]
+```
+
+1. **`db.js`** dulu — dipakai oleh health check dan seed
+2. **Health check** — modifikasi route yang sudah ada
+3. **Seed script** — standalone, tidak bergantung yang lain
+4. **Husky** — terakhir, setelah semua kode bersih dari lint

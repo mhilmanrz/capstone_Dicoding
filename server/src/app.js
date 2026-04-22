@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+
 const healthRoutes = require('./routes/health');
 const metricsRoutes = require('./routes/metrics');
 
@@ -13,14 +14,14 @@ app.use('/health', healthRoutes);
 app.use('/metrics', metricsRoutes);
 
 // TODO: Aktifkan setelah modul Scaffolding — Authentication & CRUD
-// const authRoutes = require('./routes/auth');
-// const goalRoutes = require('./routes/goals');
-// app.use('/api/auth', authRoutes);
-// app.use('/api/goals', goalRoutes);
+const authRoutes = require('./routes/auth');
+const goalRoutes = require('./routes/goals');
+app.use('/api/auth', authRoutes);
+app.use('/api/goals', goalRoutes);
 
 // TODO: Aktifkan setelah modul Scaffolding — AI Stub & Quality Foundation
-// const aiRoutes = require('./routes/ai');
-// app.use('/api/ai', aiRoutes);
+const aiRoutes = require('./routes/ai');
+app.use('/api/ai', aiRoutes);
 
 // TODO: Aktifkan setelah modul Cycle 1 — accept/reject flow
 // const taskRoutes = require('./routes/tasks');
