@@ -1,11 +1,45 @@
+# Dependencies
 node_modules/
+
+# Environment variables & API Keys
 .env
 .env.local
+.env.development
+.env.production
+.env.staging
+.env.test
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.template
+
+# Secret / credential files
+secrets.json
+secrets.yaml
+secrets.yml
+*secret*
+*credentials*
+service-account*.json
+*-key.json
+*.pem
+*.key
+
+# Build output
 client/dist/
+
+# Test coverage
 server/coverage/
+
+# Editor
 .vscode/
 .idea/
 *.swp
+
+# OS
 .DS_Store
+
+# Logs
 *.log
+
+# Database volume
 pgdata/
